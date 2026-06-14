@@ -1,7 +1,7 @@
 <template>
   <div class="flex h-screen">
     <!-- Left: Document list -->
-    <div class="w-64 bg-gray-900 p-4 flex flex-col gap-3 border-r border-gray-800">
+    <div class="w-64 bg-gray-900 p-4 flex flex-col gap-3 border-r border-gray-800 shrink-0">
       <h1 class="text-lg font-bold text-amber-400">古籍 OCR 标注平台</h1>
 
       <div>
@@ -43,7 +43,7 @@
     </div>
 
     <!-- Center: Image + OCR overlay -->
-    <div class="flex-1 relative bg-gray-950 overflow-hidden">
+    <div class="flex-1 relative bg-gray-950 overflow-hidden min-w-0">
       <ImageCanvas v-if="store.currentDoc" />
       <div v-else class="flex items-center justify-center h-full text-gray-600">
         请上传古籍图片或加载示例文档
@@ -51,7 +51,7 @@
     </div>
 
     <!-- Right: OCR results & annotations -->
-    <div class="w-80 bg-gray-900 p-4 flex flex-col gap-3 border-l border-gray-800 overflow-y-auto">
+    <div class="w-80 bg-gray-900 p-4 flex flex-col gap-3 border-l border-gray-800 overflow-y-auto shrink-0">
       <h3 class="text-amber-300 font-bold text-sm">OCR 识别结果</h3>
       <div v-if="store.currentDoc" class="space-y-2">
         <div v-for="r in store.currentDoc.results" :key="r.id"
@@ -66,7 +66,9 @@
           <div class="text-xs text-gray-400 mt-1">
             简体: {{ store.convertVariant(r.text) }}
           </div>
-          <input v-model="r.corrected" placeholder="人工校正..."
+          <input :value="r.corrected" placeholder="人工校正..."
+            @blur="onCorrectionBlur(r.id, ($event.target as HTMLInputElement).value)"
+            @keyup.enter="onCorrectionBlur(r.id, ($event.target as HTMLInputElement).value)"
             class="w-full bg-gray-700 rounded px-2 py-1 text-xs mt-1" />
         </div>
       </div>
@@ -83,18 +85,29 @@
         </div>
       </div>
     </div>
+
+    <!-- Timeline Panel -->
+    <TimelinePanel v-if="store.currentDoc" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useOcrStore } from './store/ocr'
 import ImageCanvas from './components/ImageCanvas.vue'
+import TimelinePanel from './components/TimelinePanel.vue'
 
 const store = useOcrStore()
 
 function onUpload(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (file) store.uploadAndOCR(file)
+}
+
+function onCorrectionBlur(resultId: string, value: string) {
+  const trimmed = value.trim()
+  if (trimmed) {
+    store.correctResult(resultId, trimmed)
+  }
 }
 
 function doExport() {

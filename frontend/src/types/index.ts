@@ -28,3 +28,14 @@ export interface VariantChar {
   modern: string
   frequency: number
 }
+
+export type TimelineEventType = 'ocr' | 'correction' | 'annotation_add' | 'annotation_remove' | 'document_create'
+
+export interface TimelineEvent {
+  id: string
+  type: TimelineEventType
+  documentId: string
+  timestamp: string
+  description: string
+  details?: Record<string, any>
+}

@@ -1,6 +1,6 @@
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
-import type { Document, OCRResult, Annotation } from '../types'
+import type { Document, OCRResult, Annotation, TimelineEvent, TimelineEventType } from '../types'
 
 export const useOcrStore = defineStore('ocr', () => {
   const documents = ref<Document[]>([])
@@ -8,6 +8,8 @@ export const useOcrStore = defineStore('ocr', () => {
   const isLoading = ref(false)
   const searchQuery = ref('')
   const searchResults = ref<OCRResult[]>([])
+  const timelineEvents = ref<TimelineEvent[]>([])
+  const showTimeline = ref(true)
 
   // Mock data
   const MOCK_DOC: Document = {
@@ -36,6 +38,8 @@ export const useOcrStore = defineStore('ocr', () => {
   function loadMockDocument() {
     documents.value = [MOCK_DOC]
     currentDoc.value = MOCK_DOC
+    addTimelineEvent('document_create', `创建文档 [${MOCK_DOC.name}]`, { documentId: MOCK_DOC.id })
+    addTimelineEvent('ocr', `完成 OCR 识别，共 ${MOCK_DOC.results.length} 行`, { documentId: MOCK_DOC.id, resultCount: MOCK_DOC.results.length })
   }
 
   async function uploadAndOCR(file: File) {
@@ -56,6 +60,8 @@ export const useOcrStore = defineStore('ocr', () => {
         }
         documents.value.push(doc)
         currentDoc.value = doc
+        addTimelineEvent('document_create', `创建文档 [${doc.name}]`, { documentId: doc.id })
+        addTimelineEvent('ocr', `完成 OCR 识别，共 ${doc.results.length} 行`, { documentId: doc.id, resultCount: doc.results.length })
       }
     } catch {
       // Use mock data as fallback
@@ -65,17 +71,53 @@ export const useOcrStore = defineStore('ocr', () => {
     }
   }
 
+  const currentTimeline = computed(() => {
+    if (!currentDoc.value) return []
+    return timelineEvents.value
+      .filter(e => e.documentId === currentDoc.value!.id)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  })
+
+  function addTimelineEvent(type: TimelineEventType, description: string, details?: Record<string, any>) {
+    if (!currentDoc.value) return
+    const event: TimelineEvent = {
+      id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+      type,
+      documentId: currentDoc.value.id,
+      timestamp: new Date().toISOString(),
+      description,
+      details
+    }
+    timelineEvents.value.push(event)
+  }
+
   function addAnnotation(type: Annotation['type'], bbox: [number, number, number, number], label: string, content: string) {
     if (!currentDoc.value) return
-    currentDoc.value.annotations.push({
+    const ann = {
       id: Date.now().toString(),
       type, bbox, label, content
-    })
+    }
+    currentDoc.value.annotations.push(ann)
+    addTimelineEvent('annotation_add', `添加标注 [${label}]`, { annotationId: ann.id, type, label, content })
   }
 
   function removeAnnotation(id: string) {
     if (!currentDoc.value) return
+    const ann = currentDoc.value.annotations.find(a => a.id === id)
     currentDoc.value.annotations = currentDoc.value.annotations.filter(a => a.id !== id)
+    if (ann) {
+      addTimelineEvent('annotation_remove', `删除标注 [${ann.label}]`, { annotationId: id, type: ann.type, label: ann.label })
+    }
+  }
+
+  function correctResult(resultId: string, corrected: string) {
+    if (!currentDoc.value) return
+    const result = currentDoc.value.results.find(r => r.id === resultId)
+    if (result) {
+      const oldValue = result.corrected || result.text
+      result.corrected = corrected
+      addTimelineEvent('correction', `校正文本: "${oldValue}" → "${corrected}"`, { resultId, oldValue, newValue: corrected })
+    }
   }
 
   function convertVariant(text: string): string {
@@ -104,7 +146,8 @@ export const useOcrStore = defineStore('ocr', () => {
 
   return {
     documents, currentDoc, isLoading, searchQuery, searchResults,
+    timelineEvents, showTimeline, currentTimeline,
     loadMockDocument, uploadAndOCR, addAnnotation, removeAnnotation,
-    convertVariant, searchInDocuments, exportTEI
+    correctResult, convertVariant, searchInDocuments, exportTEI, addTimelineEvent
   }
 })
